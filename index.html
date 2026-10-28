@@ -6,25 +6,28 @@
 <title>Pinot Pounce</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#1a1a2e; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; font-family:Georgia,serif; color:#eee; overflow:hidden; }
+  body { background:#1a1a2e; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; font-family:Georgia,serif; color:#eee; overflow:hidden; -webkit-tap-highlight-color: transparent; }
   h1 { font-size:1.4rem; letter-spacing:2px; margin-bottom:8px; color:#c9a0dc; }
   #score { font-size:1.1rem; margin-bottom:10px; }
-  canvas { border:2px solid #c9a0dc; border-radius:8px; background:#16213e; display:block; max-width:100%; }
+  canvas { border:2px solid #c9a0dc; border-radius:8px; background:#16213e; display:block; max-width:100%; touch-action: manipulation; }
   #msg { margin-top:10px; font-size:1rem; color:#f4a261; min-height:1.4em; }
   #hint { margin-top:6px; font-size:0.85rem; color:#888; }
+  #startBtn { margin-top:12px; padding:12px 28px; font-size:1.1rem; font-family:Georgia,serif; background:#c9a0dc; color:#1a1a2e; border:none; border-radius:8px; cursor:pointer; }
 </style>
 </head>
 <body>
 <h1>PINOT POUNCE</h1>
 <div id="score">Score: 0</div>
 <canvas id="game" width="600" height="300"></canvas>
+<button id="startBtn">TAP TO START</button>
 <div id="msg"></div>
-<div id="hint">Space or tap to jump · catch the bottles</div>
+<div id="hint">Tap or swipe up to jump · catch the bottles</div>
 <script>
 const canvas = document.getElementById('game);
 const ctx = canvas.getContext('2d);
 const scoreEl = document.getElementById('score);
 const msgEl = document.getElementById('msg);
+const startBtn = document.getElementById('startBtn);
 
 let running = false, gameOver = false;
 let score = 0, speed = 4, spawnTimer = 0, spawnRate = 90;
@@ -39,6 +42,7 @@ function reset() {
   wobble = 0; drunk = 0; bottles.length = 0;
   player.y = groundY; player.vy = 0; player.jumping = false;
   scoreEl.textContent = 'Score: 0'; msgEl.textContent = '';
+  startBtn.style.display = 'none';
   loop();
 }
 
@@ -47,9 +51,10 @@ function jump() {
   if (!player.jumping) { player.vy = -13; player.jumping = true; }
 }
 
+startBtn.addEventListener('click', reset);
 document.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); jump(); } });
-canvas.addEventListener('touchstart', e => { e.preventDefault(); jump(); });
-canvas.addEventListener('click', jump);
+document.addEventListener('touchstart', e => { if (e.target !== startBtn) { e.preventDefault(); jump(); } }, {passive: false});
+document.addEventListener('click', e => { if (e.target !== startBtn) jump(); });
 
 function spawnBottle() {
   bottles.push({ x: canvas.width + 20, y: groundY - 10 - Math.random() * 60, w: 22, h: 36, caught: false });
@@ -58,23 +63,19 @@ function spawnBottle() {
 function loop() {
   if (!running) return;
   ctx.save();
-  // drunk wobble
   drunk = Math.min(drunk + 0.002, 0.12);
   wobble += drunk;
   ctx.translate(Math.sin(wobble) * 8, Math.cos(wobble * 1.3) * 4);
   ctx.rotate(Math.sin(wobble) * 0.02);
 
-  // background
   ctx.fillStyle = '#16213e';
   ctx.fillRect(-20, -20, canvas.width + 40, canvas.height + 40);
-  // ground
   ctx.fillStyle = '#0f3460';
   ctx.fillRect(-20, groundY + 20, canvas.width + 40, canvas.height);
   ctx.strokeStyle = '#c9a0dc';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(-20, groundY + 20); ctx.lineTo(canvas.width + 20, groundY + 20); ctx.stroke();
 
-  // player (wine glass)
   ctx.fillStyle = '#e8d5b7';
   ctx.beginPath();
   ctx.moveTo(player.x, player.y);
@@ -83,11 +84,8 @@ function loop() {
   ctx.lineTo(player.x + 6, player.y + player.h);
   ctx.closePath();
   ctx.fill();
-  // stem
   ctx.fillRect(player.x + player.w/2 - 2, player.y + player.h, 4, 10);
-  // base
   ctx.fillRect(player.x + player.w/2 - 10, player.y + player.h + 10, 20, 3);
-  // wine inside
   ctx.fillStyle = '#c9a0dc';
   ctx.globalAlpha = 0.6;
   ctx.beginPath();
@@ -99,25 +97,21 @@ function loop() {
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  // physics
   player.vy += 0.7;
   player.y += player.vy;
   if (player.y >= groundY) { player.y = groundY; player.vy = 0; player.jumping = false; }
 
-  // bottles
   spawnTimer++;
   if (spawnTimer >= spawnRate) { spawnTimer = 0; spawnBottle(); if (spawnRate > 40) spawnRate -= 0.5; }
   for (let i = bottles.length - 1; i >= 0; i--) {
     const b = bottles[i];
     b.x -= speed;
-    // bottle shape
     ctx.fillStyle = '#7eb8da';
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.fillStyle = '#c9a0dc';
     ctx.fillRect(b.x + 4, b.y + 4, b.w - 8, 8);
     ctx.fillStyle = '#5a8fa8';
     ctx.fillRect(b.x + b.w/2 - 3, b.y - 8, 6, 8);
-    // collision
     if (!b.caught && player.x < b.x + b.w && player.x + player.w > b.x &&
         player.y < b.y + b.h && player.y + player.h > b.y) {
       b.caught = true;
@@ -129,18 +123,16 @@ function loop() {
     if (b.x + b.w < 0) bottles.splice(i, 1);
   }
 
-  // miss check: bottle passed below jump height without being caught
   for (const b of bottles) {
-    if (!b.caught && b.x + b.w < player.x && b.y > groundY - 70) {
-      // only end if bottle is low enough that a jump couldn't reach it
-      if (b.y > groundY - 30) { gameOver = true; break; }
-    }
+    if (!b.caught && b.x + b.w < player.x && b.y > groundY - 30) { gameOver = true; break; }
   }
 
   ctx.restore();
 
   if (gameOver) {
     running = false;
+    startBtn.style.display = 'block';
+    startBtn.textContent = 'PLAY AGAIN';
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#fff';
@@ -151,13 +143,12 @@ function loop() {
     ctx.fillText('Final Score: ' + score, canvas.width/2, canvas.height/2 + 15);
     ctx.fillStyle = '#c9a0dc';
     ctx.font = '14px Georgia';
-    ctx.fillText('Tap or press space to play again', canvas.width/2, canvas.height/2 + 50);
+    ctx.fillText('Tap the button or press space', canvas.width/2, canvas.height/2 + 50);
     return;
   }
   requestAnimationFrame(loop);
 }
 
-// start screen
 ctx.fillStyle = '#16213e';
 ctx.fillRect(0, 0, canvas.width, canvas.height);
 ctx.fillStyle = '#c9a0dc';
@@ -169,7 +160,7 @@ ctx.font = '16px Georgia';
 ctx.fillText('Catch the bottles. Don\'t let them pass.', canvas.width/2, canvas.height/2 + 5);
 ctx.fillStyle = '#888';
 ctx.font = '14px Georgia';
-ctx.fillText('Press space or tap to start', canvas.width/2, canvas.height/2 + 40);
+ctx.fillText('Tap the button or press space', canvas.width/2, canvas.height/2 + 40);
 </script>
 </body>
 </html>
